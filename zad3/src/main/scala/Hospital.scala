@@ -1,7 +1,6 @@
 import com.rabbitmq.client._
 import java.io.{BufferedReader, IOException, InputStreamReader}
 
-import Technician.channel
 import com.rabbitmq.client.AMQP.BasicProperties
 
 import scala.util.Random
@@ -19,7 +18,7 @@ object Hospital{
   val surnameList: List[String] = List("Deep","Dubikowski","Kowal","Pitt","Nowak","Kowalski")
   val testType: List[String] = List("ankle","knee","elbow")
 
-  def provideConsumer(function: (Channel, String, Envelope, BasicProperties) => Unit) = {
+  def provideConsumer(function: (Channel, String, Envelope, BasicProperties) => Unit, channel: Channel):DefaultConsumer= {
     new DefaultConsumer(channel) {
       @throws[IOException]
       override def handleDelivery(consumerTag: String, envelope: Envelope, properties: AMQP.BasicProperties, body: Array[Byte]): Unit = {
@@ -37,14 +36,17 @@ object Hospital{
 object Doctor extends App {
 
   def doctorMethod(channel: Channel, msg: String, envelope: Envelope, properties: AMQP.BasicProperties) {
-    println("Results: " + msg)
+    println("Results: " + msg.split(">>")(0))
   }
 
   private def randomPatient: String = Hospital.surnameList(Hospital.random.nextInt(Hospital.surnameList.size))
   private def randomTest: String = Hospital.testType(Hospital.random.nextInt(Hospital.testType.size))
 
+  val id = "doc"+Math.abs(Hospital.random.nextInt).toString
+  println(id)
+
   val channel: Channel = Hospital.connection.createChannel()
-  val callbackQueueName: String = channel.queueDeclare.getQueue
+  val callbackQueueName: String = channel.queueDeclare(id,false,false,false,null).getQueue
 
   channel.exchangeDeclare(Hospital.exchangeName,Hospital.exchangeType)
   channel.queueBind(callbackQueueName,Hospital.exchangeName,callbackQueueName)
@@ -55,18 +57,20 @@ object Doctor extends App {
     .replyTo(callbackQueueName)
     .build()
 
-  val callbackConsumer = Hospital.provideConsumer(doctorMethod)
+  val callbackConsumer = Hospital.provideConsumer(doctorMethod, channel)
 
   channel.basicConsume(callbackQueueName, true, callbackConsumer)
 
   val br: BufferedReader = new BufferedReader(new InputStreamReader(System.in))
 
-  while (true) {
-    val test = randomTest
-    val message = test+":"+randomPatient
-    br.readLine()
-    channel.basicPublish(Hospital.exchangeName, test, props, message.getBytes("UTF-8"))
-  }
+  new Thread(() => {
+    while (true) {
+      val test = randomTest
+      val message = test+":"+randomPatient
+      br.readLine()
+      channel.basicPublish(Hospital.exchangeName, test, props, (message+">>"+id).getBytes("UTF-8"))
+    }
+  }).start()
 
 }
 
@@ -75,15 +79,18 @@ object Technician extends App{
   val technicianSkills: List[List[String]] = List(List("ankle", "knee"),List("ankle", "elbow"),List("knee", "elbow"))
   val skills: List[String] = technicianSkills(Hospital.random.nextInt(technicianSkills.size))
   channel.basicQos(1)
+  val id = "tech"+Math.abs(Hospital.random.nextInt).toString
+  println(skills)
+  println(id)
 
   def technicianMethod(channel: Channel, msg: String, envelope: Envelope, properties: AMQP.BasicProperties) {
-     println("To test: " + msg)
+     println("To test: " + msg.split(">>")(0))
      Thread.sleep(1000)
-     channel.basicPublish(Hospital.exchangeName,properties.getReplyTo,null,msg.getBytes("UTF-8"))
+     channel.basicPublish(Hospital.exchangeName,properties.getReplyTo,null,(msg+"<<"+id).getBytes("UTF-8"))
      channel.basicAck(envelope.getDeliveryTag, false)
   }
 
-  val consumer = Hospital.provideConsumer(technicianMethod)
+  val consumer = Hospital.provideConsumer(technicianMethod, channel)
 
   channel.exchangeDeclare(Hospital.exchangeName,Hospital.exchangeType)
 
@@ -108,15 +115,16 @@ object Administrator extends App{
     @throws[IOException]
     override def handleDelivery(consumerTag: String, envelope: Envelope, properties: AMQP.BasicProperties, body: Array[Byte]): Unit = {
       val message = new String(body, "UTF-8")
-      println(consumerTag+" :: "+message)
+      println(message)
     }
   }
   channel.basicConsume(queueNameToListen, false, consumer)
 
-  val br: BufferedReader = new BufferedReader(new InputStreamReader(System.in))
-  while (true) {
-    val message = "ADMININFO: "+br.readLine()
-    channel.basicPublish(Hospital.exchangeName,Hospital.infoChanel , null, message.getBytes("UTF-8"))
-  }
-
+  new Thread(() => {
+    val br: BufferedReader = new BufferedReader(new InputStreamReader(System.in))
+    while (true) {
+      val message = "ADMININFO: " + br.readLine()
+      channel.basicPublish(Hospital.exchangeName, Hospital.infoChanel, null, message.getBytes("UTF-8"))
+    }
+  }).start()
 }
