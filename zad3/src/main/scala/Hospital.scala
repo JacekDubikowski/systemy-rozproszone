@@ -94,15 +94,17 @@ object Technician extends App{
 
   channel.exchangeDeclare(Hospital.exchangeName,Hospital.exchangeType)
 
-  skills.foreach(e => {
-    channel.queueDeclare(e,false,false,false,null)
-    channel.queueBind(e,Hospital.exchangeName,e)
-    channel.basicConsume(e, false, consumer)
-  })
+  new Thread(() => {
+    skills.foreach(e => {
+      channel.queueDeclare(e,false,false,false,null)
+      channel.queueBind(e,Hospital.exchangeName,e)
+      channel.basicConsume(e, false, consumer)
+    })
+  }).start()
 
-  val name = channel.queueDeclare.getQueue
+  val name = channel.queueDeclare(id,false,false,false,null).getQueue
   channel.queueBind(name,Hospital.exchangeName,Hospital.infoChanel)
-  channel.basicConsume(name,false,consumer)
+  channel.basicConsume(name,true,consumer)
 }
 
 object Administrator extends App{
