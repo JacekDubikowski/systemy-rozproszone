@@ -28,7 +28,6 @@ public class MedicalDataServer {
     private static List<Double> RANGE = Arrays.asList(10d,0.4d,200d,3d,33.7d,200d);
     private static List<String> PARAM_UNITS = Arrays.asList("mg", "dl", "mg/l", "ls/h", "%", "%");
 
-
     private int port = 50051;
     private Server server;
 
@@ -40,6 +39,7 @@ public class MedicalDataServer {
                 .addService(new DoctorService())
                 .build()
                 .start();
+
         logger.info("MedicalDataServer started, listening on " + port);
         Runtime.getRuntime().addShutdownHook(new Thread() {
             @Override
@@ -114,7 +114,7 @@ public class MedicalDataServer {
 
     }
 
-    private static Iterable<? extends Parameter> prepareParams() {
+    private static List<Parameter> prepareParams() {
         Random random = new Random();
         int res = random.nextInt(PARAM_TYPES.size()-1)+1;
         List<Parameter> params = new ArrayList<>(res);

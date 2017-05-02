@@ -10,10 +10,11 @@ stub = MedicalData_pb2_grpc.TechServiceStub(channel)
 
 
 def handle_add():
-    id_patient = int(raw_input("Provide ID of patient: "))
-    id_doctor = int(raw_input("Provide ID of doctor: "))
-    date = int(raw_input("Provide date as long of test: "))
-    date = str(datetime.datetime.fromtimestamp(date).strftime('%Y/%m/%d'))
+    id_patient = get_integer("Provide ID of patient: ")
+    id_doctor = get_integer("Provide ID of doctor: ")
+    date = raw_input("Provide date: ")
+    #date = int(raw_input("Provide date as long of test: "))
+    #date = str(datetime.datetime.fromtimestamp(date).strftime('%Y/%m/%d'))
     not_finished = True
     params = []
 
@@ -25,16 +26,39 @@ def handle_add():
         elif decision == "add":
             get_param(params)
     req = MedicalData_pb2.TestResult(patientId=id_patient, doctorId=id_doctor, date=date, parameters=params)
-    res = stub.AddResultToSystem(req)
-    if res.code == 2:
-        print(res.msg)
-    else:
-        print("Added")
+    try:
+        res = stub.AddResultToSystem(req)
+        if res.code == 2:
+            print(res.msg)
+        else:
+            print("Added")
+    except grpc._channel._Rendezvous:
+        print("No connection. Try again later.")
+
+
+def get_integer(string):
+    integer = raw_input(string)
+    while not integer.isdigit():
+        integer = raw_input("Try again. " + string)
+    return int(integer)
+
+
+def get_float(string):
+    def try_get_float(a):
+        try:
+            float(a)
+            return True
+        except ValueError:
+            return False
+    floating = raw_input(string)
+    while not try_get_float(floating):
+        floating = raw_input("Try again. " + string)
+    return float(floating)
 
 
 def get_param(params):
     name = raw_input("Provide name of parameter: ")
-    value = float(raw_input("Provide value of parameter: "))
+    value = get_float("Provide value of parameter: ")
     unit = raw_input("Provide unit: ")
     params.append(MedicalData_pb2.Parameter(name=name, value=value, unit=unit))
 
