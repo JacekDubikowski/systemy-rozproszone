@@ -1,3 +1,4 @@
+import datetime
 import grpc
 import sys
 
@@ -11,7 +12,8 @@ stub = MedicalData_pb2_grpc.TechServiceStub(channel)
 def handle_add():
     id_patient = int(raw_input("Provide ID of patient: "))
     id_doctor = int(raw_input("Provide ID of doctor: "))
-    date = raw_input("Provide date of test: ")
+    date = int(raw_input("Provide date as long of test: "))
+    date = str(datetime.datetime.fromtimestamp(date).strftime('%Y/%m/%d'))
     not_finished = True
     params = []
 
