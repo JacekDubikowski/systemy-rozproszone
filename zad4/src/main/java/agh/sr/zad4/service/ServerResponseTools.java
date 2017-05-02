@@ -2,6 +2,9 @@ package agh.sr.zad4.service;
 
 import agh.sr.zad4.proto.PatientRecord;
 import agh.sr.zad4.proto.ServerResponse;
+import agh.sr.zad4.proto.TestResult;
+
+import java.util.List;
 
 public class ServerResponseTools {
 
@@ -26,6 +29,15 @@ public class ServerResponseTools {
                 .setCode(ServerResponse.ServerResponseCode.OK)
                 .setMsg(msg)
                 .setRecord(pr)
+                .build();
+    }
+
+    static ServerResponse prepareServerResponseForProvidedPatientRecordFilledWithGivenResults(PatientRecord patientRecord, List<TestResult> foundResults) {
+        return ServerResponse
+                .newBuilder()
+                .setCode(ServerResponse.ServerResponseCode.OK)
+                .setMsg("Found in database")
+                .setRecord(patientRecord.toBuilder().clearResults().addAllResults(foundResults).build())
                 .build();
     }
 }

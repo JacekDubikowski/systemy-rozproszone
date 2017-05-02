@@ -24,7 +24,7 @@ public class DoctorService extends DoctorServiceGrpc.DoctorServiceImplBase{
     private void HandleMultiplyPatient(QueryParams request, StreamObserver<ServerResponse> responseObserver) {
         PseudoDatabase.CONNECTION.getPatientRecordBase().values().forEach(patientRecord -> {
             List<TestResult> foundResults = findInterestingTestResults(request, patientRecord);
-            if(foundResults.size()!=0) responseObserver.onNext(prepareServerResponse(patientRecord, foundResults));
+            if(foundResults.size()!=0) responseObserver.onNext(ServerResponseTools.prepareServerResponseForProvidedPatientRecordFilledWithGivenResults(patientRecord, foundResults));
         });
         responseObserver.onCompleted();
     }
@@ -38,7 +38,7 @@ public class DoctorService extends DoctorServiceGrpc.DoctorServiceImplBase{
             else{
                 PatientRecord patientRecord = pr.get();
                 List<TestResult> foundResults = findInterestingTestResults(request, patientRecord);
-                if(foundResults.size()!=0) responseObserver.onNext(prepareServerResponse(patientRecord, foundResults));
+                if(foundResults.size()!=0) responseObserver.onNext(ServerResponseTools.prepareServerResponseForProvidedPatientRecordFilledWithGivenResults(patientRecord, foundResults));
                 else{
                     responseObserver.onNext(ServerResponseTools.prepareNotFoundMsg("No such result for patient in database."));
                 }
@@ -69,15 +69,6 @@ public class DoctorService extends DoctorServiceGrpc.DoctorServiceImplBase{
                 .stream()
                 .filter(p -> compareParam(p,toCompare))
                 .collect(Collectors.toList());
-    }
-
-    private ServerResponse prepareServerResponse(PatientRecord patientRecord, List<TestResult> foundResults) {
-        return ServerResponse
-                .newBuilder()
-                .setCode(ServerResponse.ServerResponseCode.OK)
-                .setMsg("Found in database")
-                .setRecord(patientRecord.toBuilder().clearResults().addAllResults(foundResults).build())
-                .build();
     }
 
     private boolean compareParam(Parameter paramCurrent, Parameter toCompare){
