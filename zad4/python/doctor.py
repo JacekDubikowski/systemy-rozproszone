@@ -47,15 +47,17 @@ while not_finished:
 
 query = MedicalData_pb2.QueryParams(patientId=id_patient, params=params)
 
-for res in stub.findRecords(query):
-    if res.code == 2:
-        print res.msg
-    else:
-        record = res.record
-        print(str(record.id) + " " + record.data)
-        for r in record.results:
-            print("\t"+str(r.patientId)+" "+r.date+" "+str(r.doctorId))
-            for t in r.parameters:
-                print("\t\t"+t.name+" "+str(t.value)+" "+t.unit)
-
-print("Finished")
+try:
+    for res in stub.findRecords(query):
+        if res.code == 2:
+            print res.msg
+        else:
+            record = res.record
+            print(str(record.id) + " " + record.data)
+            for r in record.results:
+                print("\t"+str(r.patientId)+" "+r.date+" "+str(r.doctorId))
+                for t in r.parameters:
+                    print("\t\t"+t.name+" "+str(t.value)+" "+t.unit)
+    print("Finished")
+except grpc._channel._Rendezvous:
+    print("No connection lost.")
