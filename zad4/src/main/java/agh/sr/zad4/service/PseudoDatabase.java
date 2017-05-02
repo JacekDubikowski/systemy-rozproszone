@@ -39,26 +39,4 @@ public enum PseudoDatabase {
         return Optional.ofNullable(patientRecordBase.get(id));
     }
 
-    public ServerResponse findSpecificPatientAndPrepareResponse(int id){
-        if(!patientRecordBase.containsKey(id)){
-            return prepareNotFoundMsg();
-        }
-        else{
-            PatientRecord pr = patientRecordBase.get(id);
-            return ServerResponse
-                    .newBuilder()
-                    .setCode(ServerResponse.ServerResponseCode.OK)
-                    .setMsg("Found in database")
-                    .setRecord(pr)
-                    .build();
-        }
-    }
-
-    public static ServerResponse prepareNotFoundMsg(){
-        return ServerResponse
-                .newBuilder()
-                .setCode(ServerResponse.ServerResponseCode.NOT_FOUND)
-                .setMsg("Patient isn't in database.")
-                .build();
-    }
 }

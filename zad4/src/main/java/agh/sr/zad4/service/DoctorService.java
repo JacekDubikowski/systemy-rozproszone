@@ -14,40 +14,38 @@ public class DoctorService extends DoctorServiceGrpc.DoctorServiceImplBase{
     @Override
     public void findRecords(QueryParams request, StreamObserver<ServerResponse> responseObserver) {
         if(request.getPatientId()!=0){
-            Optional<PatientRecord> pr = PseudoDatabase.CONNECTION.findParticularPatientRecord(request.getPatientId());
-            if(pr.isPresent()){
-                if(request.getParamsList().size()==0) {
-                    responseObserver.onNext(ServerResponse
-                            .newBuilder()
-                            .setCode(ServerResponse.ServerResponseCode.OK)
-                            .setMsg("Found in database")
-                            .setRecord(pr.get())
-                            .build()
-                    );
-                }
-                else{
-                    PatientRecord patientRecord = pr.get();
-                    List<TestResult> foundResults = findInterestingTestResults(request, patientRecord);
-                    if(foundResults.size()!=0) responseObserver.onNext(prepareServerResponse(patientRecord, foundResults));
-                    else{
-                        responseObserver.onNext(ServerResponse
-                                .newBuilder()
-                                .setCode(ServerResponse.ServerResponseCode.NOT_FOUND)
-                                .setMsg("No such result for patient in database.")
-                                .build()
-                        );
-                    }
-                }
-            }
-            else{
-                responseObserver.onNext(PseudoDatabase.prepareNotFoundMsg());
-            }
+            handleOnePatient(request, responseObserver);
         }
         else {
-            PseudoDatabase.CONNECTION.getPatientRecordBase().values().forEach(patientRecord -> {
+            HandleMultiplyPatient(request, responseObserver);
+        }
+    }
+
+    private void HandleMultiplyPatient(QueryParams request, StreamObserver<ServerResponse> responseObserver) {
+        PseudoDatabase.CONNECTION.getPatientRecordBase().values().forEach(patientRecord -> {
+            List<TestResult> foundResults = findInterestingTestResults(request, patientRecord);
+            if(foundResults.size()!=0) responseObserver.onNext(prepareServerResponse(patientRecord, foundResults));
+        });
+        responseObserver.onCompleted();
+    }
+
+    private void handleOnePatient(QueryParams request, StreamObserver<ServerResponse> responseObserver) {
+        Optional<PatientRecord> pr = PseudoDatabase.CONNECTION.findParticularPatientRecord(request.getPatientId());
+        if(pr.isPresent()){
+            if(request.getParamsList().size()==0) {
+                responseObserver.onNext(ServerResponseTools.prepareOkServerResponseWithPatientRecord(pr.get(),"Found in database"));
+            }
+            else{
+                PatientRecord patientRecord = pr.get();
                 List<TestResult> foundResults = findInterestingTestResults(request, patientRecord);
                 if(foundResults.size()!=0) responseObserver.onNext(prepareServerResponse(patientRecord, foundResults));
-            });
+                else{
+                    responseObserver.onNext(ServerResponseTools.prepareNotFoundMsg("No such result for patient in database."));
+                }
+            }
+        }
+        else{
+            responseObserver.onNext(ServerResponseTools.prepareNotFoundMsg("Patient isn't in database."));
         }
         responseObserver.onCompleted();
     }
