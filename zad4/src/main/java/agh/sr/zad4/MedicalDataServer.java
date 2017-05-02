@@ -66,11 +66,6 @@ public class MedicalDataServer {
 
     public static void main(String[] args) throws IOException, InterruptedException {
         final MedicalDataServer server = new MedicalDataServer();
-        PatientRecord pr = PatientRecord
-                .newBuilder()
-                .setData("Jacek Dubikowski")
-                .build();
-        PseudoDatabase.CONNECTION.addPatientRecord(pr);
         generatePatients();
         server.start();
         server.blockUntilShutdown();
