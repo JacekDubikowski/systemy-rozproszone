@@ -17,6 +17,8 @@ public class TechService extends TechServiceGrpc.TechServiceImplBase{
             );
         }
         else{
+            PatientRecord pr = PseudoDatabase.CONNECTION.getPatientRecordBase().get(request.getPatientId());
+            PseudoDatabase.CONNECTION.getPatientRecordBase().put(pr.getId(),pr.toBuilder().addResults(request).build());
             responseObserver.onNext(
                     ServerResponseTools.prepareCreatedServerResponse()
             );
