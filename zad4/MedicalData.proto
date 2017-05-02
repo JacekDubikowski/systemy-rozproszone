@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "agh.sr.zad4.proto";
+
+package grpc;
+
+message Parameter {
+    string name = 1;
+    double value = 2;
+    string unit = 3;
+    double min = 4;
+    double max = 5;
+}
+
+message TestResult {
+    int32 patientId = 1;
+    int32 doctorId = 2;
+    string date = 3;
+    repeated Parameter parameters = 4;
+}
+
+message PatientRecord {
+    int32 id = 1;
+    string data = 2;
+    repeated TestResult results = 3;
+}
+
+message QueryParams {
+    int32 patientId = 1;
+    repeated Parameter params = 2;
+}
+
+message ServerResponse{
+    enum ServerResponseCode {
+        OK = 0;
+        CREATED = 1;
+        NOT_FOUND = 2;
+        ERROR = 3;
+        EMPTY = 4;
+    }
+    ServerResponseCode code = 1;
+    string msg = 2;
+    PatientRecord record = 3;
+    TestResult results = 4;
+}
+
+message PatientId{
+    int32 id = 1;
+}
+
+service TechService{
+    rpc AddResultToSystem (TestResult) returns (ServerResponse);
+}
+
+service PatientSerice{
+    rpc findMyRecord (PatientId) returns (ServerResponse);
+}
+
+service DoctorService{
+    rpc findRecords (QueryParams) returns (stream ServerResponse);
+}
