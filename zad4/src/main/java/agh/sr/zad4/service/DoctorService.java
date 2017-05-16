@@ -24,7 +24,14 @@ public class DoctorService extends DoctorServiceGrpc.DoctorServiceImplBase{
     private void HandleMultiplyPatient(QueryParams request, StreamObserver<ServerResponse> responseObserver) {
         PseudoDatabase.CONNECTION.getPatientRecordBase().values().forEach(patientRecord -> {
             List<TestResult> foundResults = findInterestingTestResults(request, patientRecord);
-            if(foundResults.size()!=0) responseObserver.onNext(ServerResponseTools.prepareServerResponseForProvidedPatientRecordFilledWithGivenResults(patientRecord, foundResults));
+            if(foundResults.size()!=0){
+                responseObserver.onNext(ServerResponseTools.prepareServerResponseForProvidedPatientRecordFilledWithGivenResults(patientRecord, foundResults));
+                try {
+                    Thread.sleep(1000);
+                } catch (InterruptedException e) {
+
+                }
+            }
         });
         responseObserver.onCompleted();
     }

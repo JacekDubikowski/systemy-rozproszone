@@ -92,7 +92,7 @@ public class MedicalDataServer {
     private static void prepareResults() {
         Random random = new Random();
         PseudoDatabase.CONNECTION.getPatientRecordBase().values().forEach(e -> {
-            int res = random.nextInt(20-10)+10;
+            int res = random.nextInt(60)+10;
             List<TestResult> prList = new ArrayList<>(res);
             for (int i = 0; i < res; i++) {
                 prList.add(TestResult
