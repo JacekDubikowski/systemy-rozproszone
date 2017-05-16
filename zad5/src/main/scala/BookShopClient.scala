@@ -8,7 +8,7 @@ import scala.io.StdIn
 object BookShopClient {
 
   def main(args: Array[String]): Unit = {
-    val config = ConfigFactory.parseFile(new File("./remote_app2.conf"))
+    val config = ConfigFactory.parseFile(new File("./client.conf"))
     val system = ActorSystem("client", config)
     val actor = system.actorOf(Props(new ClientActor), name="client")
 
@@ -25,10 +25,12 @@ object BookShopClient {
 }
 
 class ClientActor extends Actor{
-  val system: ActorSelection = context.actorSelection("akka.tcp://bookshop@127.0.0.1:2552/user/server")
+  val server: ActorSelection = context.actorSelection("akka.tcp://bookshop@127.0.0.1:2552/user/server")
   override def receive: Receive = {
-    case x:Find => system.tell(x, self)
+    case Find(x) => server.tell(Stream(x), self)
     case Found(price) => println(price)
+    case StreamChunk(chunk) => println(chunk)
+    case x:String => println(x)
     case _ => ???
   }
 }
