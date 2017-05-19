@@ -40,10 +40,10 @@ class BookShopServer extends Actor{
   }
 
   override def receive: Receive = {
-    case Find(title) => find(title, sender)
-    case Order(title) => order(title, sender)
-    case Stream(title) => stream(title, sender)
-    case _ => println(self.path);
+    case title: String if title.head == 'f' => find(title.tail, sender)
+    case title: String if title.head == 'o' => order(title.tail, sender)
+    case title: String if title.head == 's' => stream(title.tail, sender)
+    case _ => println("Not known request from:" + sender);
   }
 
   class OrderActor(target: ActorRef) extends Actor{
@@ -77,14 +77,17 @@ class BookShopServer extends Actor{
   }
 
   class StreamActor extends Actor{
+    implicit val materializer: ActorMaterializer = ActorMaterializer.create(context)
 
     def handleStream(title: String, target: ActorRef): Unit = {
-      implicit val materializer = ActorMaterializer.create(context)
       val sink: Sink[String, Future[Done]] = Sink.foreach(e => target ! e)
-      val source = Source.fromIterator(() => SourceIO.fromFile("./book/80day10.txt").getLines())
-        .throttle(1,1.second,1,ThrottleMode.shaping)
-        .runWith(sink)
-//        .onComplete(e => context.stop(self))
+      try {
+        Source.fromIterator(() => SourceIO.fromFile("./book/" + title + ".txt").getLines())
+          .throttle(1, 1.second, 1, ThrottleMode.shaping)
+          .runWith(sink).onComplete(_ => target ! true)
+      } catch {
+        case _: Throwable => target ! false
+      }
     }
 
     override def receive: Receive = {
@@ -95,3 +98,10 @@ class BookShopServer extends Actor{
   }
 
 }
+
+sealed trait ServerMessage
+
+case class Found(price: Double) extends ServerMessage
+case class NotFound() extends ServerMessage
+case class OrderConfirmation() extends ServerMessage
+case class StreamChunk(chunk: String) extends ServerMessage
