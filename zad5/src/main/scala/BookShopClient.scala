@@ -61,9 +61,7 @@ class ClientActor extends Actor{
     case x: Find   => handleFind(x)
     case x: Order  => handleOrder(x)
     case x: Stream => handleStream(x)
-    case x:Double  => println(x)
-    case x:String  => println(x)
-    case _ => println(ClientActor.unexpectedMessage)
+    case _         => println(ClientActor.unexpectedMessage)
   }
 
   class FindActor extends Actor {

@@ -1,4 +1,6 @@
-import java.io.File
+import java.io.{File, PrintWriter}
+import java.nio.charset.Charset
+import java.nio.file.{Files, Paths, StandardOpenOption}
 
 import akka.Done
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
@@ -24,6 +26,30 @@ object BookShopServer {
 class BookShopServer extends Actor{
   val streamActor: ActorRef = context.actorOf(Props(new StreamActor))
 
+  override def receive: Receive = {
+    case title: String if title.head == 'f' => find(title.tail, sender)
+    case title: String if title.head == 'o' => order(title.tail, sender)
+    case title: String if title.head == 's' => stream(title.tail, sender)
+    case _                                  =>
+      println("Not known request from " + sender)
+      sender ! false
+  }
+
+  def writeOrder(order: String): Unit ={
+    synchronized{
+      val writer = new PrintWriter(
+        Files.newBufferedWriter(
+          Paths.get("./orders.txt"),
+          Charset.defaultCharset(),
+          StandardOpenOption.CREATE,
+          StandardOpenOption.WRITE,
+          StandardOpenOption.APPEND
+        )
+      )
+      writer.println(order)
+      writer.close()
+    }
+  }
 
   def find(title: String, sender: ActorRef): Unit = {
     val finderActor: ActorRef = context.actorOf(Props(new FinderActor(sender)))
@@ -39,17 +65,18 @@ class BookShopServer extends Actor{
     streamActor ! (title, sender)
   }
 
-  override def receive: Receive = {
-    case title: String if title.head == 'f' => find(title.tail, sender)
-    case title: String if title.head == 'o' => order(title.tail, sender)
-    case title: String if title.head == 's' => stream(title.tail, sender)
-    case _ => println("Not known request from:" + sender);
-  }
-
   class OrderActor(target: ActorRef) extends Actor{
 
     def handleOrder(title: String): Unit = {
-
+      try{
+        writeOrder(title)
+        target ! true
+      }
+      catch {
+        case _:Throwable => sender ! false
+      } finally {
+        context.stop(self)
+      }
     }
 
     override def receive: Receive = {
@@ -62,18 +89,48 @@ class BookShopServer extends Actor{
   }
 
   class FinderActor(target: ActorRef) extends Actor{
+    private val search1 = context.actorOf(Props(new DatabaseSearchingActor("database1.txt")))
+    private val search2 = context.actorOf(Props(new DatabaseSearchingActor("database2.txt")))
+    var booleanCounter = 0
 
     def handleFinding(title: String): Unit = {
-
+      search1 ! title
+      search2 ! title
     }
 
     override def receive: Receive = {
-      case title: String =>
+      case title: String         =>
         handleFinding(title)
+      case price: Double         =>
+        target ! price
         context.stop(self)
-      case _ => context.stop(self)
+      case x: Boolean if !x      =>
+        booleanCounter+=1
+        if(booleanCounter == 2){
+          target ! false
+          context.stop(self)
+        }
+      case _                     => context.stop(self)
     }
 
+    class DatabaseSearchingActor(filename: String) extends Actor{
+      override def receive: Receive = {
+        case x:String => findInDatabase(x)
+        case _ => context.stop(self)
+      }
+      def findInDatabase(title: String): Unit = {
+        SourceIO.fromFile(filename).getLines().foreach(line =>
+          if(line.toLowerCase.contains(title.toLowerCase)) sender ! line.
+              trim.
+              reverse.
+              takeWhile(x => !x.isWhitespace)
+              .reverse
+              .toDouble
+        )
+        sender ! false
+        context.stop(self)
+      }
+    }
   }
 
   class StreamActor extends Actor{
@@ -93,15 +150,8 @@ class BookShopServer extends Actor{
     override def receive: Receive = {
       case (title: String, target: ActorRef) =>
         handleStream(title,target)
-      case _ => ???
+      case _ => println("Unexpected message.")
     }
   }
 
 }
-
-sealed trait ServerMessage
-
-case class Found(price: Double) extends ServerMessage
-case class NotFound() extends ServerMessage
-case class OrderConfirmation() extends ServerMessage
-case class StreamChunk(chunk: String) extends ServerMessage
