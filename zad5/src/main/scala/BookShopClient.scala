@@ -1,7 +1,9 @@
-import java.io.File
+import java.io.{File, FileNotFoundException}
 
-import akka.actor.{Actor, ActorRef, ActorSelection, ActorSystem, Props}
+import akka.actor.SupervisorStrategy.{Restart, Resume, Stop}
+import akka.actor.{Actor, ActorRef, ActorSelection, ActorSystem, OneForOneStrategy, Props}
 import com.typesafe.config.ConfigFactory
+import scala.concurrent.duration._
 
 import scala.io.StdIn
 
@@ -41,6 +43,11 @@ object ClientActor{
 
 class ClientActor extends Actor{
   val server: ActorSelection = context.actorSelection("akka.tcp://bookshop@127.0.0.1:2552/user/server")
+
+  override val supervisorStrategy: OneForOneStrategy =
+    OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+      case _: Throwable                => Restart
+    }
 
   def handleFind(msg: Find): Unit = {
     val findActor: ActorRef = context.actorOf(Props(new FindActor))

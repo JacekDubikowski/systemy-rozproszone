@@ -1,11 +1,12 @@
-import java.io.{File, PrintWriter}
+import java.io.{File, FileNotFoundException, PrintWriter}
 import java.nio.charset.Charset
 import java.nio.file.{Files, Paths, StandardOpenOption}
 
 import akka.Done
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.SupervisorStrategy.{Resume, Stop}
+import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.{ActorMaterializer, ThrottleMode}
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision, ThrottleMode}
 import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -34,6 +35,11 @@ class BookShopServer extends Actor{
       println("Not known request from " + sender)
       sender ! false
   }
+
+  override val supervisorStrategy: OneForOneStrategy =
+    OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+      case _: Throwable                => Resume
+    }
 
   def writeOrder(order: String): Unit ={
     synchronized{
@@ -92,6 +98,17 @@ class BookShopServer extends Actor{
     private val search1 = context.actorOf(Props(new DatabaseSearchingActor("database1.txt")))
     private val search2 = context.actorOf(Props(new DatabaseSearchingActor("database2.txt")))
     var booleanCounter = 0
+    var exceptionCounter = 0
+
+    override val supervisorStrategy: OneForOneStrategy =
+      OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+        case _: FileNotFoundException    =>
+          exceptionCounter+=1
+          if(exceptionCounter==2) target ! false
+          Stop
+        case _: NumberFormatException    => Resume
+        case _: Throwable                => Stop
+      }
 
     def handleFinding(title: String): Unit = {
       search1 ! title
@@ -120,12 +137,12 @@ class BookShopServer extends Actor{
       }
       def findInDatabase(title: String): Unit = {
         SourceIO.fromFile(filename).getLines().foreach(line =>
-          if(line.toLowerCase.contains(title.toLowerCase)) sender ! line.
-              trim.
-              reverse.
-              takeWhile(x => !x.isWhitespace)
-              .reverse
-              .toDouble
+          if(line.toLowerCase.contains(title.toLowerCase)) sender ! line
+            .trim
+            .reverse
+            .takeWhile(x => !x.isWhitespace)
+            .reverse
+            .toDouble
         )
         sender ! false
         context.stop(self)
@@ -134,7 +151,12 @@ class BookShopServer extends Actor{
   }
 
   class StreamActor extends Actor{
-    implicit val materializer: ActorMaterializer = ActorMaterializer.create(context)
+
+    private val decider: Supervision.Decider = {
+      case _: Throwable => Supervision.Stop
+    }
+
+    implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
 
     def handleStream(title: String, target: ActorRef): Unit = {
       val sink: Sink[String, Future[Done]] = Sink.foreach(e => target ! e)
