@@ -73,13 +73,17 @@ class ClientActor extends Actor{
 
   class FindActor extends Actor {
     var title: String = _
+    var notFoundCounter = 0
     override def receive: Receive = {
       case Find(x)          =>
         title = x
         server ! "f" + x
       case x: Boolean if !x =>
-        println(title + " not found")
-        context.stop(self)
+        notFoundCounter+=1
+        if(notFoundCounter==2) {
+          println(title + " not found")
+          context.stop(self)
+        }
       case x: Double        =>
         println(title + " costs " + x)
         context.stop(self)

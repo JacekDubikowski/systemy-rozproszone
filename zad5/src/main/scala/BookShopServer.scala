@@ -59,24 +59,24 @@ class BookShopServer extends Actor{
 
   def find(title: String, sender: ActorRef): Unit = {
     val finderActor: ActorRef = context.actorOf(Props(new FinderActor(sender)))
-    finderActor ! title
+    finderActor.forward(title)(context)
   }
 
   def order(title: String, sender: ActorRef): Unit = {
-    val orderActor: ActorRef = context.actorOf(Props(new OrderActor(sender)))
-    orderActor ! title
+    val orderActor: ActorRef = context.actorOf(Props(new OrderActor()))
+    orderActor.forward(title)(context)
   }
 
   def stream(title: String, sender: ActorRef): Unit = {
     streamActor ! (title, sender)
   }
 
-  class OrderActor(target: ActorRef) extends Actor{
+  class OrderActor extends Actor{
 
     def handleOrder(title: String): Unit = {
       try{
         writeOrder(title)
-        target ! true
+        sender ! true
       }
       catch {
         case _:Throwable => sender ! false
@@ -97,36 +97,24 @@ class BookShopServer extends Actor{
   class FinderActor(target: ActorRef) extends Actor{
     private val search1 = context.actorOf(Props(new DatabaseSearchingActor("database1.txt")))
     private val search2 = context.actorOf(Props(new DatabaseSearchingActor("database2.txt")))
-    var booleanCounter = 0
-    var exceptionCounter = 0
 
     override val supervisorStrategy: OneForOneStrategy =
       OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
         case _: FileNotFoundException    =>
-          exceptionCounter+=1
-          if(exceptionCounter==2) target ! false
+          target ! false
           Stop
         case _: NumberFormatException    => Resume
         case _: Throwable                => Stop
       }
 
     def handleFinding(title: String): Unit = {
-      search1 ! title
-      search2 ! title
+      search1.forward(title)(context)
+      search2.forward(title)(context)
     }
 
     override def receive: Receive = {
       case title: String         =>
         handleFinding(title)
-      case price: Double         =>
-        target ! price
-        context.stop(self)
-      case x: Boolean if !x      =>
-        booleanCounter+=1
-        if(booleanCounter == 2){
-          target ! false
-          context.stop(self)
-        }
       case _                     => context.stop(self)
     }
 
