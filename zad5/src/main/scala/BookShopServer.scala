@@ -1,9 +1,12 @@
-import java.io.File
+import java.io.{File, FileNotFoundException, PrintWriter}
+import java.nio.charset.Charset
+import java.nio.file.{Files, Paths, StandardOpenOption}
 
 import akka.Done
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor.SupervisorStrategy.{Resume, Stop}
+import akka.actor.{Actor, ActorRef, ActorSystem, OneForOneStrategy, Props}
 import akka.stream.scaladsl.{Sink, Source}
-import akka.stream.{ActorMaterializer, ThrottleMode}
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Supervision, ThrottleMode}
 import com.typesafe.config.ConfigFactory
 
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -24,32 +27,62 @@ object BookShopServer {
 class BookShopServer extends Actor{
   val streamActor: ActorRef = context.actorOf(Props(new StreamActor))
 
+  override def receive: Receive = {
+    case title: String if title.head == 'f' => find(title.tail, sender)
+    case title: String if title.head == 'o' => order(title.tail, sender)
+    case title: String if title.head == 's' => stream(title.tail, sender)
+    case _                                  =>
+      println("Not known request from " + sender)
+      sender ! false
+  }
+
+  override val supervisorStrategy: OneForOneStrategy =
+    OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+      case _: Throwable                => Resume
+    }
+
+  def writeOrder(order: String): Unit ={
+    synchronized{
+      val writer = new PrintWriter(
+        Files.newBufferedWriter(
+          Paths.get("./orders.txt"),
+          Charset.defaultCharset(),
+          StandardOpenOption.CREATE,
+          StandardOpenOption.WRITE,
+          StandardOpenOption.APPEND
+        )
+      )
+      writer.println(order)
+      writer.close()
+    }
+  }
 
   def find(title: String, sender: ActorRef): Unit = {
     val finderActor: ActorRef = context.actorOf(Props(new FinderActor(sender)))
-    finderActor ! title
+    finderActor.forward(title)(context)
   }
 
   def order(title: String, sender: ActorRef): Unit = {
-    val orderActor: ActorRef = context.actorOf(Props(new OrderActor(sender)))
-    orderActor ! title
+    val orderActor: ActorRef = context.actorOf(Props(new OrderActor()))
+    orderActor.forward(title)(context)
   }
 
   def stream(title: String, sender: ActorRef): Unit = {
     streamActor ! (title, sender)
   }
 
-  override def receive: Receive = {
-    case Find(title) => find(title, sender)
-    case Order(title) => order(title, sender)
-    case Stream(title) => stream(title, sender)
-    case _ => println(self.path);
-  }
-
-  class OrderActor(target: ActorRef) extends Actor{
+  class OrderActor extends Actor{
 
     def handleOrder(title: String): Unit = {
-
+      try{
+        writeOrder(title)
+        sender ! true
+      }
+      catch {
+        case _:Throwable => sender ! false
+      } finally {
+        context.stop(self)
+      }
     }
 
     override def receive: Receive = {
@@ -62,35 +95,72 @@ class BookShopServer extends Actor{
   }
 
   class FinderActor(target: ActorRef) extends Actor{
+    private val search1 = context.actorOf(Props(new DatabaseSearchingActor("database1.txt")))
+    private val search2 = context.actorOf(Props(new DatabaseSearchingActor("database2.txt")))
+
+    override val supervisorStrategy: OneForOneStrategy =
+      OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange = 1 minute) {
+        case _: FileNotFoundException    =>
+          target ! false
+          Stop
+        case _: NumberFormatException    => Resume
+        case _: Throwable                => Stop
+      }
 
     def handleFinding(title: String): Unit = {
-
+      search1.forward(title)(context)
+      search2.forward(title)(context)
     }
 
     override def receive: Receive = {
-      case title: String =>
+      case title: String         =>
         handleFinding(title)
-        context.stop(self)
-      case _ => context.stop(self)
+      case _                     => context.stop(self)
     }
 
+    class DatabaseSearchingActor(filename: String) extends Actor{
+      override def receive: Receive = {
+        case x:String => findInDatabase(x)
+        case _ => context.stop(self)
+      }
+      def findInDatabase(title: String): Unit = {
+        SourceIO.fromFile(filename).getLines().foreach(line =>
+          if(line.toLowerCase.contains(title.toLowerCase)) sender ! line
+            .trim
+            .reverse
+            .takeWhile(x => !x.isWhitespace)
+            .reverse
+            .toDouble
+        )
+        sender ! false
+        context.stop(self)
+      }
+    }
   }
 
   class StreamActor extends Actor{
 
+    private val decider: Supervision.Decider = {
+      case _: Throwable => Supervision.Stop
+    }
+
+    implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(decider))
+
     def handleStream(title: String, target: ActorRef): Unit = {
-      implicit val materializer = ActorMaterializer.create(context)
       val sink: Sink[String, Future[Done]] = Sink.foreach(e => target ! e)
-      val source = Source.fromIterator(() => SourceIO.fromFile("./book/80day10.txt").getLines())
-        .throttle(1,1.second,1,ThrottleMode.shaping)
-        .runWith(sink)
-//        .onComplete(e => context.stop(self))
+      try {
+        Source.fromIterator(() => SourceIO.fromFile("./book/" + title + ".txt").getLines())
+          .throttle(1, 1.second, 1, ThrottleMode.shaping)
+          .runWith(sink).onComplete(_ => target ! true)
+      } catch {
+        case _: Throwable => target ! false
+      }
     }
 
     override def receive: Receive = {
       case (title: String, target: ActorRef) =>
         handleStream(title,target)
-      case _ => ???
+      case _ => println("Unexpected message.")
     }
   }
 
