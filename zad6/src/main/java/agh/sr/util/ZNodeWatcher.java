@@ -5,18 +5,22 @@ import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
 
+import java.io.IOException;
+
 import static agh.sr.ZooKeeperClient.TEST_NODE;
 
 public class ZNodeWatcher implements Watcher, ZooKeeperErrorHandler {
 
     private final ZooKeeper zooKeeper;
     private final ZNodeChildrenWatcher ZNodeChildrenWatcher;
+    private final String[] exec;
     private Process process = null;
 
-    public ZNodeWatcher(final ZooKeeper zooKeeper) {
+    public ZNodeWatcher(final ZooKeeper zooKeeper, String[] exec) {
         addShutdownHookHandlingClosingProcess(zooKeeper);
         this.zooKeeper = zooKeeper;
         ZNodeChildrenWatcher = new ZNodeChildrenWatcher(zooKeeper);
+        this.exec = exec;
     }
 
     private void addShutdownHookHandlingClosingProcess(final ZooKeeper zooKeeper) {
@@ -31,12 +35,10 @@ public class ZNodeWatcher implements Watcher, ZooKeeperErrorHandler {
     }
 
     public void process(WatchedEvent watchedEvent) {
-        System.out.println(watchedEvent.toString());
         try {
             switch (watchedEvent.getType()) {
                 case NodeCreated:
-                    zooKeeper.getChildren(TEST_NODE, ZNodeChildrenWatcher);
-                    process = Runtime.getRuntime().exec("cat");
+                    handleExistingTestNode();
                     break;
                 case NodeDeleted:
                     if (process != null) process.destroy();
@@ -52,10 +54,14 @@ public class ZNodeWatcher implements Watcher, ZooKeeperErrorHandler {
         }
     }
 
-    public void handleExistingTestNode() {
+    private void handleExistingTestNode() throws KeeperException, InterruptedException, IOException {
+        zooKeeper.getChildren(TEST_NODE, ZNodeChildrenWatcher);
+        process = Runtime.getRuntime().exec(exec);
+    }
+
+    public void handleExistingTestNodeBeforeStartingApp() {
         try{
-            zooKeeper.getChildren(TEST_NODE, ZNodeChildrenWatcher);
-            process = Runtime.getRuntime().exec("cat");
+            handleExistingTestNode();
         } catch (KeeperException e) {
             handleKeeperException(e,TEST_NODE);
         } catch (Exception e) {

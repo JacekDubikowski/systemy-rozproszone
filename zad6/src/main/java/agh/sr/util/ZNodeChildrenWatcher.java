@@ -4,6 +4,7 @@ import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.WatchedEvent;
 import org.apache.zookeeper.Watcher;
 import org.apache.zookeeper.ZooKeeper;
+import org.apache.zookeeper.data.Stat;
 
 import java.util.List;
 
@@ -18,14 +19,22 @@ public class ZNodeChildrenWatcher implements Watcher, ZooKeeperErrorHandler  {
     }
 
     public void process(WatchedEvent watchedEvent) {
-        System.out.println(watchedEvent);
         try {
             this.zooKeeper.getChildren(TEST_NODE, this);
-            System.out.println(countDescendantsOfMainNode());
+            handleCountingDescendants();
         } catch (KeeperException e) {
             handleKeeperException(e,TEST_NODE);
         } catch (InterruptedException e) {
             handleOtherException();
+        }
+    }
+
+    private void handleCountingDescendants() throws KeeperException, InterruptedException {
+        Stat stat = this.zooKeeper.exists(TEST_NODE, false);
+        if(stat!=null){
+            int descendants = countDescendantsOfMainNode();
+            stat = this.zooKeeper.exists(TEST_NODE, false);
+            if(stat!=null) System.out.println(descendants);
         }
     }
 
